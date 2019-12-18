@@ -60,7 +60,7 @@ def downsample_tensor(X, factor):
     return np.mean(X[:length].reshape(-1, factor, *X.shape[1:]), axis=1)
 
 def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrate, azim, output, viewport,
-                     limit=-1, downsample=1, size=6, input_video_path=None, input_video_skip=0):
+                     limit=-1, downsample=1, size=6, input_video_path=None, input_video_skip=0, azim_list=[0, 45, 90]):
     """
     TODO
     Render an animation. The supported output modes are:
@@ -70,9 +70,10 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
      -- 'filename.mp4': render and export the animation as an h264 video (requires ffmpeg).
      -- 'filename.gif': render and export the animation a gif file (requires imagemagick).
     """
+    # import pdb; pdb.set_trace()
     plt.ioff()
-    fig = plt.figure(figsize=(size*(1 + len(poses)), size))
-    ax_in = fig.add_subplot(1, 1 + len(poses), 1)
+    fig = plt.figure(figsize=(size*(1 + len(poses)*len(azim_list)), size))
+    ax_in = fig.add_subplot(1, 1 + len(poses)*len(azim_list), 1)
     ax_in.get_xaxis().set_visible(False)
     ax_in.get_yaxis().set_visible(False)
     ax_in.set_axis_off()
@@ -82,21 +83,29 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
     lines_3d = []
     trajectories = []
     radius = 1.7
+
+    angle_title_dic = {0:"front", 45:"frontside", 90:"side"}
+
     for index, (title, data) in enumerate(poses.items()):
-        ax = fig.add_subplot(1, 1 + len(poses), index+2, projection='3d')
-        ax.view_init(elev=15., azim=azim)
-        ax.set_xlim3d([-radius/2, radius/2])
-        ax.set_zlim3d([0, radius])
-        ax.set_ylim3d([-radius/2, radius/2])
-        ax.set_aspect('equal')
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-        ax.set_zticklabels([])
-        ax.dist = 7.5
-        ax.set_title(title) #, pad=35
-        ax_3d.append(ax)
-        lines_3d.append([])
-        trajectories.append(data[:, 0, [0, 1]])
+        for azim_idx, azim_view in enumerate(azim_list):
+            ax = fig.add_subplot(1, 1 + len(poses)*len(azim_list), index*len(azim_list)+azim_idx+2, projection='3d')
+            ax.view_init(elev=15., azim=azim+azim_view)
+            ax.set_xlim3d([-radius/2, radius/2])
+            ax.set_zlim3d([0, radius])
+            ax.set_ylim3d([-radius/2, radius/2])
+            # ax.set_aspect('equal')
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.set_zticklabels([])
+            ax.dist = 7.5
+            try:
+                ax.set_title(" ".join((title, angle_title_dic[azim_view]))) #, pad=35
+            except KeyError:
+                ax.set_title(" ".join((title, str(azim_view)))) #, pad=35
+
+            ax_3d.append(ax)
+            lines_3d.append([])
+            trajectories.append(data[:, 0, [0, 1]])
     poses = list(poses.values())
 
     # Decode video
@@ -154,7 +163,10 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
             for j, j_parent in enumerate(parents):
                 if j_parent == -1:
                     continue
-                    
+                
+                if j in [2,3,5,6]:
+                    continue
+
                 if len(parents) == keypoints.shape[1] and keypoints_metadata['layout_name'] != 'coco':
                     # Draw skeleton only if keypoints match (otherwise we don't have the parents definition)
                     lines.append(ax_in.plot([keypoints[i, j, 0], keypoints[i, j_parent, 0]],
@@ -162,7 +174,7 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
 
                 col = 'red' if j in skeleton.joints_right() else 'black'
                 for n, ax in enumerate(ax_3d):
-                    pos = poses[n][i]
+                    pos = poses[int(n/len(azim_list))][i]
                     lines_3d[n].append(ax.plot([pos[j, 0], pos[j_parent, 0]],
                                                [pos[j, 1], pos[j_parent, 1]],
                                                [pos[j, 2], pos[j_parent, 2]], zdir='z', c=col))
@@ -176,16 +188,24 @@ def render_animation(keypoints, keypoints_metadata, poses, skeleton, fps, bitrat
             for j, j_parent in enumerate(parents):
                 if j_parent == -1:
                     continue
-                
+
+                if j in [2,3,5,6]:
+                    continue
+                elif j == 4:
+                    idx = 2
+                elif j > 6:
+                    idx = j-4
+                else:
+                    idx = j
+ 
                 if len(parents) == keypoints.shape[1] and keypoints_metadata['layout_name'] != 'coco':
                     lines[j-1][0].set_data([keypoints[i, j, 0], keypoints[i, j_parent, 0]],
                                            [keypoints[i, j, 1], keypoints[i, j_parent, 1]])
-
                 for n, ax in enumerate(ax_3d):
-                    pos = poses[n][i]
-                    lines_3d[n][j-1][0].set_xdata([pos[j, 0], pos[j_parent, 0]])
-                    lines_3d[n][j-1][0].set_ydata([pos[j, 1], pos[j_parent, 1]])
-                    lines_3d[n][j-1][0].set_3d_properties([pos[j, 2], pos[j_parent, 2]], zdir='z')
+                    pos = poses[int(n/len(azim_list))][i]
+                    lines_3d[n][idx-1][0].set_xdata([pos[j, 0], pos[j_parent, 0]])
+                    lines_3d[n][idx-1][0].set_ydata([pos[j, 1], pos[j_parent, 1]])
+                    lines_3d[n][idx-1][0].set_3d_properties([pos[j, 2], pos[j_parent, 2]], zdir='z')
 
             points.set_offsets(keypoints[i])
         

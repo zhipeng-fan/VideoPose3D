@@ -61,6 +61,9 @@ class TemporalModelBase(nn.Module):
         return frames
         
     def forward(self, x):
+        """
+        x: [Batch Size, Temporal Dimension, Number of Joints, Feature Size (Typically 2)]
+        """
         assert len(x.shape) == 4
         assert x.shape[-2] == self.num_joints_in
         assert x.shape[-1] == self.in_features
